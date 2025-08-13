@@ -92,6 +92,25 @@ frappe.Application = class Application {
 		}
 		this.set_route();
 
+		// Force-hide desk sidebar globally (requested customization)
+		try {
+			document.body.classList.add('no-sidebar');
+			frappe.router.on('change', () => {
+				try { document.body.classList.add('no-sidebar'); } catch (e) { /* no-op */ }
+			});
+		} catch (e) { /* no-op */ }
+
+			// Redirect default landing to Workspaces Hub if on a generic desk route
+			try {
+				frappe.after_ajax(() => {
+					const r = frappe.get_route() || [];
+					const generic = !r[0] || r[0] === "home" || r[0] === "modules" || (r[0] === "workspace" && !r[1]);
+					if (generic) {
+						frappe.set_route('page', 'workspaces-hub');
+					}
+				});
+			} catch (e) { /* no-op */ }
+
 		// trigger app startup
 		$(document).trigger("startup");
 

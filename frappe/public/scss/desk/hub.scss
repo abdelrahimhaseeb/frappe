@@ -1,0 +1,35 @@
+/* Hub styles in Frappe core */
+.workspaces-hub{position:relative;overflow:hidden;direction:rtl}
+.workspaces-hub .hub-grid{position:relative}
+.hub-card{position:relative;transition:transform .15s ease,box-shadow .15s ease}
+.hub-card:hover{transform:translateY(-4px);box-shadow:0 10px 24px rgba(0,0,0,.35)!important}
+.hub-card:active{transform:translateY(0)}
+.odoo-tile{width:98px;height:98px;border-radius:12px;background:var(--tile-bg,#6a9fd0);position:relative;margin:0 auto;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 0 rgba(0,0,0,.15), inset 0 1px 0 rgba(255,255,255,.2)}
+.odoo-tile::after{content:"";position:absolute;right:10px;top:14px;width:70px;height:70px;transform:skewX(-18deg);background:rgba(0,0,0,.22);opacity:.25;filter:blur(0.3px);clip-path:polygon(0 0,100% 0,60% 100%,0 100%);border-radius:10px}
+.odoo-icon{color:#fff;font-size:44px;line-height:1}
+.odoo-label{margin-top:10px;color:#fff;text-shadow:0 1px 0 rgba(0,0,0,.2);font-weight:600;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px;margin-left:auto;margin-right:auto}
+/* Hide sidebar on hub */
+body[data-route*="workspaces-hub"] .layout-side-section,
+body[data-route*="workspaces-hub"] .side-section,
+body[data-route*="workspaces-hub"] .desk-sidebar,
+body[data-route*="workspaces-hub"] .standard-sidebar,
+body[data-route*="workspaces-hub"] .app-sidebar,
+body[data-route*="workspaces-hub"] .workspace-sidebar{display:none!important}
+body[data-route*="workspaces-hub"] .layout-main-section-wrapper{max-width:100%!important;flex:1 1 100%!important}
+body.hub-active .layout-side-section,
+body.hub-active .side-section,
+body.hub-active .desk-sidebar,
+body.hub-active .standard-sidebar,
+body.hub-active .app-sidebar,
+body.hub-active .workspace-sidebar{display:none!important}
+body.hub-active .layout-main-section-wrapper{max-width:100%!important;flex:1 1 100%!important}
+
+/* Global: when body has no-sidebar (customization) */
+body.no-sidebar .layout-side-section,
+body.no-sidebar .side-section,
+body.no-sidebar .desk-sidebar,
+body.no-sidebar .standard-sidebar,
+body.no-sidebar .app-sidebar,
+body.no-sidebar .workspace-sidebar,
+body.no-sidebar .workspace-sidebar-skeleton{display:none!important}
+body.no-sidebar .layout-main-section-wrapper{max-width:100%!important;flex:1 1 100%!important}
