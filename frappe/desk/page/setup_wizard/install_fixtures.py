@@ -1,4 +1,4 @@
-# Copyright (c) 2021, Frappe Technologies Pvt. Ltd. and Contributors
+# Copyright (c) 2026, Haseeb and contributors
 # License: MIT. See LICENSE
 
 import frappe
@@ -9,9 +9,7 @@ from frappe.utils.dashboard import sync_dashboards
 
 
 def _(x, *args, **kwargs):
-	"""Redefine the translation function to return the string as is.
-	We want to create english records but still mark the strings as translatable.
-	The respective DocTypes have 'Translate Link Fields' enabled."""
+	"""Return untranslated labels for fixture creation."""
 	return x
 
 
@@ -56,10 +54,10 @@ def update_salutations():
 
 
 def add_unsubscribe():
-	for unsubscribe in [
+	for unsubscribe in (
 		{"email": "admin@example.com", "global_unsubscribe": 1},
 		{"email": "guest@example.com", "global_unsubscribe": 1},
-	]:
+	):
 		if not frappe.get_all("Email Unsubscribe", filters=unsubscribe):
 			doc = frappe.new_doc("Email Unsubscribe")
 			doc.update(unsubscribe)

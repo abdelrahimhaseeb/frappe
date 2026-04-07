@@ -5,7 +5,9 @@ import json
 
 import frappe
 from frappe import _
-from frappe.core.doctype.installed_applications.installed_applications import get_setup_wizard_completed_apps
+from frappe.core.doctype.installed_applications.installed_applications import (
+	get_setup_wizard_completed_apps,
+)
 from frappe.geo.country_info import get_country_info
 from frappe.permissions import AUTOMATIC_ROLES
 from frappe.translate import send_translations, set_default_language
@@ -80,7 +82,7 @@ def initialize_system_settings_and_user(system_settings_data, user_data):
 			"language": system_settings_data.get("language"),
 			"country": system_settings_data.get("country"),
 			"currency": system_settings_data.get("currency"),
-			"time_zone": system_settings_data.get("time_zone"),
+			"time_zone": system_settings_data.get("time_zone") or system_settings_data.get("timezone"),
 		}
 	)
 	system_settings.save()
@@ -161,7 +163,7 @@ def enable_setup_wizard_complete(app_name):
 
 def update_global_settings(args):  # nosemgrep
 	if args.language and args.language != "English":
-		set_default_language(get_language_code(args.lang))
+		set_default_language(get_language_code(args.language))
 		frappe.db.commit()
 	frappe.clear_cache()
 
@@ -273,7 +275,7 @@ def update_system_settings(args):  # nosemgrep
 			"time_format": frappe.db.get_value("Country", args.get("country"), "time_format"),
 			"number_format": number_format,
 			"enable_scheduler": 1 if not frappe.in_test else 0,
-			"backup_limit": 3,  # Default for downloadable backups
+			"backup_limit": 3,
 			"enable_telemetry": cint(args.get("enable_telemetry")),
 		}
 	)
@@ -315,7 +317,7 @@ def create_or_update_user(args):  # nosemgrep
 		user.append_roles(*_get_default_roles())
 		user.append_roles("System Manager")
 		user.flags.no_welcome_mail = True
-		user.insert()
+		user.insert(ignore_permissions=True)
 
 		frappe.flags.mute_emails = _mute_emails
 
@@ -337,7 +339,6 @@ def parse_args(args):  # nosemgrep
 
 	args = frappe._dict(args)
 
-	# strip the whitespace
 	for key, value in args.items():
 		if isinstance(value, str):
 			args[key] = strip(value)
@@ -385,8 +386,7 @@ def disable_future_access():
 
 @frappe.whitelist()
 def load_messages(language):
-	"""Load translation messages for given language from all `setup_wizard_requires`
-	javascript files"""
+	"""Backward-compatible loader used by setup_wizard.js on newer sites."""
 	from frappe.translate import get_messages_for_boot
 
 	frappe.clear_cache()
@@ -398,6 +398,7 @@ def load_messages(language):
 
 @frappe.whitelist()
 def load_languages():
+	"""Return language metadata expected by setup_wizard.js."""
 	Language = frappe.qb.DocType("Language")
 	language_codes = (
 		frappe.qb.from_(Language)
@@ -418,9 +419,10 @@ def load_languages():
 		.orderby(Language.language_code)
 		.run(as_dict=1)
 	)
-	codes_to_names = {}
-	for d in language_codes:
-		codes_to_names[d.language_code] = d.language_name
+
+	codes_to_names = {
+		row.language_code: row.language_name for row in language_codes if row.language_code
+	}
 
 	return {
 		"default_language": frappe.db.get_value("Language", frappe.local.lang, "language_name")
@@ -432,6 +434,7 @@ def load_languages():
 
 @frappe.whitelist()
 def load_user_details():
+	"""Return prefilled signup details if they were captured before login."""
 	return {
 		"full_name": frappe.cache.hget("full_name", "signup"),
 		"email": frappe.cache.hget("email", "signup"),
@@ -439,7 +442,6 @@ def load_user_details():
 
 
 def prettify_args(args):  # nosemgrep
-	# remove attachments
 	for key, val in args.items():
 		if isinstance(val, str) and "data:image" in val:
 			filename = val.split("data:image", 1)[0].strip(", ")
@@ -502,8 +504,15 @@ def log_setup_wizard_exception(traceback, args):  # nosemgrep
 		setup_log.write(json.dumps(args))
 
 
-def get_language_code(lang):
-	return frappe.db.get_value("Language", {"language_name": lang})
+def get_language_code(language_name):
+	if not language_name:
+		return frappe.local.lang
+
+	return (
+		frappe.db.get_value("Language", {"language_name": language_name}, "name")
+		or frappe.db.get_value("Language", {"language_name": language_name}, "language_code")
+		or language_name
+	)
 
 
 def enable_twofactor_all_roles():
@@ -519,7 +528,6 @@ def make_records(records, debug=False):
 	if debug:
 		print("make_records: in DEBUG mode")
 
-	# LOG every success and failure
 	for record in records:
 		doctype = record.get("doctype")
 		condition = record.get("__condition")
@@ -530,7 +538,6 @@ def make_records(records, debug=False):
 		doc = frappe.new_doc(doctype)
 		doc.update(record)
 
-		# ignore mandatory for root
 		parent_link_field = "parent_" + scrub(doc.doctype)
 		if doc.meta.get_field(parent_link_field) and not doc.get(parent_link_field):
 			doc.flags.ignore_mandatory = True
@@ -539,13 +546,13 @@ def make_records(records, debug=False):
 		try:
 			frappe.db.savepoint(savepoint)
 			doc.insert(ignore_permissions=True, ignore_if_duplicate=True)
-		except Exception as e:
+		except Exception as exc:
 			frappe.clear_last_message()
 			frappe.db.rollback(save_point=savepoint)
 			exception = record.get("__exception")
 			if exception:
 				config = _dict(exception)
-				if isinstance(e, config.exception):
+				if isinstance(exc, config.exception):
 					config.handler()
 				else:
 					show_document_insert_error()
