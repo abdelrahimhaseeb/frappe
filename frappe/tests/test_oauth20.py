@@ -8,6 +8,7 @@ import requests
 from werkzeug.test import TestResponse
 
 import frappe
+from frappe.oauth import OAuthWebRequestValidator
 from frappe.integrations.oauth2 import encode_params
 from frappe.tests import IntegrationTestCase
 from frappe.tests.test_api import get_test_client, make_request, suppress_stdout
@@ -102,6 +103,26 @@ class TestOAuth20(FrappeRequestTestCase):
 	def test_invalid_login(self):
 		with suppress_stdout():
 			self.assertFalse(check_valid_openid_response(client=self))
+
+	def test_newline_separated_redirect_uris(self):
+		redirect_uris = [
+			"https://oauth-redirect-sandbox.googleusercontent.com/r/test-client",
+			"https://oauth-redirect.googleusercontent.com/r/test-client",
+		]
+		self.oauth_client.redirect_uris = "\n".join(redirect_uris)
+		self.oauth_client.default_redirect_uri = redirect_uris[0]
+		self.oauth_client.save()
+
+		validator = OAuthWebRequestValidator()
+		self.assertTrue(validator.validate_redirect_uri(self.client_id, redirect_uris[1], None))
+		self.assertTrue(validator.confirm_redirect_uri(self.client_id, None, redirect_uris[1], None))
+		self.assertFalse(
+			validator.validate_redirect_uri(
+				self.client_id,
+				"https://attacker.example.com/callback",
+				None,
+			)
+		)
 
 	def test_login_using_authorization_code(self):
 		update_client_for_auth_code_grant(self.client_id)

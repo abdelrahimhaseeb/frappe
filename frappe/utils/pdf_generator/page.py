@@ -134,6 +134,18 @@ class Page:
 				if url.startswith(get_host_url()):
 					path = url.replace(get_host_url(), "").split("?v", 1)[0]
 					clean_path = urllib.parse.unquote(path)
+					if not clean_path.strip("/"):
+						self.session.send(
+							"Fetch.fulfillRequest",
+							{
+								"requestId": data["request_id"],
+								"responseCode": 204,
+								"responseHeaders": [],
+								"body": "",
+							},
+							return_future=True,
+						)
+						return
 
 					if clean_path.startswith("assets/"):
 						final_system_path = os.path.abspath(os.path.join(bench_sites, clean_path))
@@ -146,6 +158,18 @@ class Page:
 						)
 
 					if is_safe:
+						if os.path.isdir(final_system_path):
+							self.session.send(
+								"Fetch.fulfillRequest",
+								{
+									"requestId": data["request_id"],
+									"responseCode": 204,
+									"responseHeaders": [],
+									"body": "",
+								},
+								return_future=True,
+							)
+							return
 						content = frappe.read_file(final_system_path, as_base64=True)
 						response_headers = []
 						# write logic to handle all file types as required

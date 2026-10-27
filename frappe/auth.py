@@ -632,6 +632,13 @@ def validate_auth():
 	"""
 	authorization_header = frappe.get_request_header("Authorization", "").split(" ")
 
+	# OAuth clients authenticate to the token endpoint with HTTP Basic auth.
+	# The OAuth server validates those client credentials; treating them as a
+	# Frappe user's API key here rejects standards-compliant token exchanges
+	# before the OAuth endpoint can process them.
+	if _is_oauth_token_client_auth(authorization_header):
+		return
+
 	if len(authorization_header) == 2:
 		validate_oauth(authorization_header)
 		validate_auth_via_api_keys(authorization_header)
@@ -642,6 +649,18 @@ def validate_auth():
 	# should terminate here.
 	if len(authorization_header) == 2 and frappe.session.user in ("", "Guest"):
 		raise frappe.AuthenticationError
+
+
+def _is_oauth_token_client_auth(authorization_header):
+	if len(authorization_header) != 2 or authorization_header[0].lower() != "basic":
+		return False
+
+	request = getattr(frappe.local, "request", None)
+	return bool(
+		request
+		and request.path == "/api/method/frappe.integrations.oauth2.get_token"
+		and request.method == "POST"
+	)
 
 
 def validate_oauth(authorization_header):

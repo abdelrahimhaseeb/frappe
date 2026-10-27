@@ -1,8 +1,10 @@
 import base64
+import binascii
 import datetime
 import hashlib
+import hmac
 import re
-from urllib.parse import urljoin, urlparse
+from urllib.parse import unquote, urljoin, urlparse
 
 from oauthlib.common import Request
 from oauthlib.openid import RequestValidator
@@ -29,11 +31,12 @@ class OAuthWebRequestValidator(RequestValidator):
 		# Is the client allowed to use the supplied redirect_uri? i.e. has
 		# the client previously registered this EXACT redirect uri.
 
-		redirect_uris = (
-			cstr(frappe.db.get_value("OAuth Client", client_id, "redirect_uris"))
-			.strip()
-			.split(get_url_delimiter())
-		)
+		# Dynamic client registration stores one URI per line, while manually
+		# configured clients historically used spaces. ``split()`` supports both
+		# representations without relaxing the exact URI comparison below.
+		redirect_uris = cstr(
+			frappe.db.get_value("OAuth Client", client_id, "redirect_uris")
+		).split()
 
 		if redirect_uri in redirect_uris:
 			return True
@@ -96,9 +99,16 @@ class OAuthWebRequestValidator(RequestValidator):
 		Loads the client based on request parameters and sets in oauth request.
 		Returns True on success, None on error.
 		"""
-		# Get ClientID in URL
-		if request.client_id:
+		basic_credentials = self._get_basic_client_credentials()
+		provided_secret = None
+
+		if basic_credentials:
+			client_name, provided_secret = basic_credentials
+		elif request.client_id:
 			client_name = request.client_id
+			provided_secret = getattr(request, "client_secret", None) or frappe.form_dict.get(
+				"client_secret"
+			)
 		else:
 			# Extract token, instantiate OAuth Bearer Token and use clientid from there.
 			if "refresh_token" in frappe.form_dict:
@@ -106,17 +116,43 @@ class OAuthWebRequestValidator(RequestValidator):
 			elif "token" in frappe.form_dict:
 				token_filters = {"name": frappe.form_dict["token"]}
 			else:
-				token_filters = {"name": frappe.get_request_header("Authorization").split(" ")[1]}
+				return False
 
 			client_name = frappe.db.get_value("OAuth Bearer Token", filters=token_filters, fieldname="client")
 
+		if not client_name:
+			return False
+
 		oc: OAuthClient = frappe.get_doc("OAuth Client", client_name)
+		if not oc.is_public_client():
+			if not provided_secret or not hmac.compare_digest(
+				frappe.safe_encode(provided_secret),
+				frappe.safe_encode(oc.client_secret or ""),
+			):
+				return False
+
 		try:
 			request.client = request.client or oc.as_dict()
+			request.client_id = oc.client_id
 		except Exception as e:
 			return generate_json_error_response(e)
 
 		return True
+
+	@staticmethod
+	def _get_basic_client_credentials():
+		authorization = frappe.get_request_header("Authorization", "")
+		scheme, separator, encoded_credentials = authorization.partition(" ")
+		if not separator or scheme.lower() != "basic":
+			return None
+
+		try:
+			decoded = frappe.safe_decode(base64.b64decode(encoded_credentials, validate=True))
+			client_id, client_secret = decoded.split(":", 1)
+		except (binascii.Error, ValueError, UnicodeDecodeError):
+			return None
+
+		return unquote(client_id), unquote(client_secret)
 
 	def authenticate_client_id(self, client_id, request, *args, **kwargs):
 		cli_id = frappe.db.get_value("OAuth Client", client_id, "name")
@@ -174,7 +210,7 @@ class OAuthWebRequestValidator(RequestValidator):
 		redirect_uris = frappe.db.get_value("OAuth Client", client_id, "redirect_uris")
 
 		if redirect_uris:
-			redirect_uris = redirect_uris.split(get_url_delimiter())
+			redirect_uris = redirect_uris.split()
 			return redirect_uri in redirect_uris
 
 		return saved_redirect_uri == redirect_uri

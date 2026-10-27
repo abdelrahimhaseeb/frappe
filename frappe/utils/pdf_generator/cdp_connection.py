@@ -36,7 +36,13 @@ class CDPSocketClient:
 	async def _listen(self):
 		try:
 			async for message in self.connection:
-				self._handle_message(frappe.json.loads(message))
+				try:
+					self._handle_message(frappe.json.loads(message))
+				except Exception:
+					frappe.log_error(
+						title="Error handling Chrome DevTools message",
+						message=f"{frappe.get_traceback()}",
+					)
 		except Exception:
 			frappe.log_error(title="WebSocket listening error:", message=f"{frappe.get_traceback()}")
 
